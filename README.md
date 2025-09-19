@@ -1,141 +1,71 @@
-🌍 Air Quality Health Monitor
+Air Quality Index (AQI) Forecasting and Visualization
+This project simulates a synthetic air quality dataset over two years with daily pollutant measurements and computes the Air Quality Index (AQI). It supports querying historical pollutant data by date, generating a 14-day AQI forecast using Holt-Winters Exponential Smoothing, providing health alerts, and visualizing both historical and recent air quality trends.
 
-An AI-powered air quality forecasting & health monitoring system that predicts AQI trends using Holt-Winters Exponential Smoothing and provides AI-driven health & safety recommendations.
+Features
+Synthetic dataset generation for daily PM2.5, NO2, and CO concentrations over 2 years.
 
-🚀 Features
+AQI calculation combining pollutant levels with clipping to realistic bounds.
 
-Forecasts next 3 AQI values from historical data.
+Health alert messaging based on AQI value categories.
 
-Detects trend (improving 📉 or worsening 📈).
+User input for date-specific pollutant data querying and subsequent AQI forecasting.
 
-Classifies health risk level based on AQI.
+Time series forecasting with trend and optional seasonality (daily and yearly).
 
-Provides health & safety recommendations using Gemini AI.
+Visualizations for AQI trends and individual pollutant concentrations starting from the user input date.
 
-Supports command-line arguments and interactive input.
-
-⚙️ Installation
-1. Clone Repository
-git clone https://github.com/yourusername/air-quality-monitor.git
-cd air-quality-monitor
-
-2. Create Virtual Environment (recommended)
-python -m venv venv
-source venv/bin/activate   # Mac/Linux
-venv\Scripts\activate      # Windows
-
-3. Install Dependencies
-pip install -r requirements.txt
-
-
-requirements.txt
+Requirements
+Python 3.x
 
 pandas
+
 numpy
+
+matplotlib
+
+seaborn
+
 statsmodels
-google-generativeai
-argparse
 
-🔑 Setup Gemini API
+Install dependencies with:
 
-Get an API Key from Google AI Studio
-.
+bash
+pip install pandas numpy matplotlib seaborn statsmodels
+Usage
+Run the script
+The script will generate a synthetic air quality dataset saved as synthetic_air_quality_data.csv.
 
-Replace your key in the script:
+Enter a date (format YYYY-MM-DD) when prompted to:
 
-genai.configure(api_key="YOUR_API_KEY")
+View pollutant concentrations and AQI for that specific day.
 
-🖥️ Usage
-Run with CLI arguments
-python app.py --aqi 90,110,130,150,170,200,220
+Receive a health alert based on AQI.
 
-Run in interactive mode
-python app.py
+Generate and report a 14-day AQI forecast starting from the given date.
 
+Display visualizations showing AQI and pollutant trends from the entered date forward.
 
-Example Input/Output:
+Interpret output:
 
-Enter AQI History (comma-separated, at least 5 values): 90,110,130,150,170,200,220
+Numerical pollutant data and AQI for the input date.
 
-🌍 Air Quality Forecast & Health Insights
---------------------------------------------------
-Next 3 AQI Predictions: 230.45, 240.67, 250.89
-Trend                : increasing 📈 (worsening)
-Health Risk          : ⚠️ Very Unhealthy – Avoid outdoor activities.
+Health risk alerts aligned with AQI values.
 
-🤖 AI Recommendation:
-Limit outdoor exposure and use N95 masks.
+Forecasted AQI values with corresponding health alerts for 14 days.
 
-AI Explanation:
-The forecast indicates a worsening air trend with unhealthy AQI levels. Restricting outdoor activity reduces exposure risk and protects vulnerable groups.
+Time series plots focusing on the selected period and onward.
 
-✅ Test Cases
-Test Case 1: Good Air Quality
-python app.py --aqi 30,40,35,45,50,55,60
+Files
+synthetic_air_quality_data.csv: Generated synthetic pollutant and AQI dataset.
 
+Script file: Generates data, accepts user input, forecasts AQI, and produces visualizations.
 
-Expected:
+Notes
+The forecasting model automatically adjusts seasonal period parameters depending on available data length.
 
-Forecast remains low AQI (<100).
+AQI and health alerts follow standard air quality classification.
 
-Trend: Either stable or slight increase.
+Visual outputs require an environment capable of displaying plots.
 
-Health Risk: 🟢 Good.
+This project uses synthetic data intended for educational and demonstration purposes only.
 
-AI suggests normal outdoor activities.
-
-Test Case 2: Unhealthy Trend
-python app.py --aqi 120,140,160,170,190,200,220
-
-
-Expected:
-
-Forecast shows rising AQI values.
-
-Trend: increasing 📈 (worsening).
-
-Health Risk: 🟠 Unhealthy.
-
-AI suggests limiting outdoor exposure.
-
-Test Case 3: Hazardous Air
-python app.py --aqi 280,300,320,340,360,380,400
-
-
-Expected:
-
-Forecast predicts very high AQI.
-
-Trend: increasing 📈 (worsening).
-
-Health Risk: ☠️ Hazardous.
-
-AI suggests staying indoors & using air purifiers.
-
-📊 Methodology
-
-Forecasting Model → Holt-Winters Exponential Smoothing (trend="add").
-
-Trend Detection → Compares last 3 values vs first 3.
-
-Health Risk Classification:
-
-🟢 Good: AQI ≤ 100
-
-🟡 Moderate: 101–150
-
-🟠 Unhealthy: 151–200
-
-⚠️ Very Unhealthy: 201–300
-
-☠️ Hazardous: > 300
-
-AI Layer → Gemini generates health & pollution reduction advice.
-
-📌 Roadmap
-
- Add real AQI API integration (e.g., OpenWeather, AQICN).
-
- Build Flask dashboard with charts.
-
- Extend to regional pollution forecasting.

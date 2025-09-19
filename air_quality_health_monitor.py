@@ -1,99 +1,129 @@
-import argparse
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)  # suppress freq warning
+
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-import google.generativeai as genai
+from datetime import timedelta
 
-# -----------------------
-# 1. Configure Gemini API
-# -----------------------
-genai.configure(api_key="AIzaSyC2EVCSgC-DRWVunkKi7Ro0J1upoN3UglE")  # Replace with your API key
-model = genai.GenerativeModel("gemini-1.5-flash")
+# --- Step 1: Generate synthetic pollution dataset for 2 years ---
+np.random.seed(42)
+days = 730  # 2 years
 
-# -----------------------
-# 2. Helper: Health Risk Detection
-# -----------------------
-def health_risk(aqi):
-    if aqi > 300:
-        return "☠️ Hazardous – Stay indoors, use air purifiers & masks!"
-    elif aqi > 200:
-        return "⚠️ Very Unhealthy – Avoid outdoor activities."
-    elif aqi > 150:
-        return "🟠 Unhealthy – Sensitive groups at risk."
-    elif aqi > 100:
-        return "🟡 Moderate – Acceptable but caution for sensitive groups."
+dates = pd.date_range(start="2024-01-01", periods=days, freq='D')
+
+pm25 = 40 + 15 * np.sin(2 * np.pi * dates.dayofyear / 365) + np.random.normal(0, 5, days)
+no2 = 30 + 10 * np.cos(2 * np.pi * dates.dayofyear / 365) + np.random.normal(0, 4, days)
+co = 0.8 + 0.3 * np.sin(2 * np.pi * dates.dayofyear / 365) + np.random.normal(0, 0.1, days)
+
+aqi = 0.5 * pm25 + 0.3 * no2 + 0.2 * (co * 50)
+aqi = np.clip(aqi, 0, 500)
+
+data = pd.DataFrame({
+    'date': dates,
+    'pm25': pm25,
+    'no2': no2,
+    'co': co,
+    'aqi': aqi
+})
+
+data.to_csv("synthetic_air_quality_data.csv", index=False)
+print("Synthetic air quality dataset saved as 'synthetic_air_quality_data.csv'.")
+
+# Setup timeseries index and frequency
+data.set_index('date', inplace=True)
+data.index.freq = 'D'  # explicit frequency to suppress warning
+
+def health_alert(aqi_value):
+    if aqi_value <= 50:
+        return "Good - Air quality is satisfactory."
+    elif aqi_value <= 100:
+        return "Moderate - Acceptable air quality."
+    elif aqi_value <= 150:
+        return "Unhealthy for Sensitive Groups - Take precaution."
+    elif aqi_value <= 200:
+        return "Unhealthy - Reduce outdoor exertion."
+    elif aqi_value <= 300:
+        return "Very Unhealthy - Avoid outdoor activities."
     else:
-        return "🟢 Good – Air quality is safe."
+        return "Hazardous - Stay indoors and wear masks."
 
-# -----------------------
-# 3. Forecast & AI Function
-# -----------------------
-def forecast(aqi_history):
+# --- User input for date query and forecast start ---
+date_str = input(f"\nEnter a date (YYYY-MM-DD) to get pollutant data and forecast (e.g. {data.index[-1].strftime('%Y-%m-%d')}): ")
+
+try:
+    query_date = pd.to_datetime(date_str)
+except Exception:
+    print("Invalid date format. Please enter date as YYYY-MM-DD.")
+    exit()
+
+if query_date not in data.index:
+    print("Date not found in dataset.")
+    exit()
+
+row = data.loc[query_date]
+print(f"\nDate: {query_date.date()}")
+print(f"PM2.5: {row.pm25:.2f}")
+print(f"NO2: {row.no2:.2f}")
+print(f"CO: {row.co:.2f}")
+print(f"AQI: {row.aqi:.2f}")
+print(f"Health Alert: {health_alert(row.aqi)}")
+
+ts_sub = data.loc[query_date:]['aqi']
+forecast_period = 14
+
+if len(ts_sub) < 10:
+    print(f"\nNot enough data available from {query_date.date()} to generate a 14-day forecast. Available days: {len(ts_sub)}.")
+else:
     try:
-        if len(aqi_history) < 5:
-            print("❌ Error: Need at least 5 AQI data points for forecasting.")
-            return
+        if len(ts_sub) >= 730:
+            seasonal_periods = 365
+            seasonal = 'add'
+        elif len(ts_sub) >= 30:
+            seasonal_periods = 30
+            seasonal = 'add'
+        else:
+            seasonal_periods = None
+            seasonal = None
 
-        # Holt-Winters forecasting
-        series = pd.Series(aqi_history)
-        model_hw = ExponentialSmoothing(series, trend="add", seasonal=None)
-        model_fit = model_hw.fit()
-        forecast_values = model_fit.forecast(steps=3).tolist()
+        model_sub = ExponentialSmoothing(ts_sub, trend='add', seasonal=seasonal, seasonal_periods=seasonal_periods)
+        fit_sub = model_sub.fit()
+        forecast_sub = fit_sub.forecast(forecast_period)
+        forecast_dates_sub = pd.date_range(ts_sub.index[-1] + timedelta(days=1), periods=forecast_period)
+        alerts_sub = forecast_sub.map(health_alert)
 
-        # Detect trend
-        trend = "increasing 📈 (worsening)" if np.mean(aqi_history[-3:]) > np.mean(aqi_history[:3]) else "decreasing 📉 (improving)"
-
-        # Health risk
-        risk_message = health_risk(forecast_values[0])
-
-        # AI Recommendation
-        prompt = f"""
-        You are an AI health & environment analyst.
-        Given AQI history: {aqi_history}
-        Forecasted next 3 AQI values: {forecast_values}
-        Trend: {trend}
-        Health Risk: {risk_message}
-
-        Provide:
-        1. Health & safety recommendations.
-        2. Steps to reduce pollution exposure.
-        """
-        response = model.generate_content(prompt)
-        ai_text = response.text if response else "❌ No AI response"
-
-        # Split AI output
-        parts = ai_text.split("\n", 1)
-        ai_recommendation = parts[0].strip() if parts else "Not generated"
-        ai_explanation = parts[1].strip() if len(parts) > 1 else ai_text
-
-        # Print results
-        print("\n🌍 Air Quality Forecast & Health Insights")
-        print("-" * 50)
-        print(f"Next 3 AQI Predictions: {', '.join([str(round(x,2)) for x in forecast_values])}")
-        print(f"Trend                : {trend}")
-        print(f"Health Risk          : {risk_message}")
-        print("\n🤖 AI Recommendation:")
-        print(ai_recommendation)
-        print("\nAI Explanation:")
-        print(ai_explanation)
+        forecast_df_sub = pd.DataFrame({
+            'forecast_date': forecast_dates_sub,
+            'predicted_aqi': forecast_sub.values,
+            'health_alert': alerts_sub.values
+        })
+        print("\nAQI Forecast & Health Alerts for Next 14 Days from input date:")
+        print(forecast_df_sub)
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print("Error during forecasting:", e)
 
-# -----------------------
-# 4. CLI Setup
-# -----------------------
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="🌍 Air Quality Health Monitor (Terminal Version)")
-    parser.add_argument("--aqi", type=str, help="Comma-separated AQI history (at least 5 values)")
+# --- Updated Visualizations: Only show data from entered date onward ---
+data_sub = data.loc[query_date:]
 
-    args = parser.parse_args()
+plt.figure(figsize=(14,6))
+plt.plot(data_sub.index, data_sub['aqi'].values, label='Historical AQI')
+plt.title('Air Quality Index (AQI) Over Time')
+plt.xlabel('Date')
+plt.ylabel('AQI')
+plt.legend()
+plt.tight_layout()
+plt.show()
 
-    # Interactive input if not provided
-    if args.aqi:
-        aqi_input = args.aqi
-    else:
-        aqi_input = input("Enter AQI History (comma-separated, at least 5 values): ")
-
-    aqi_history = [float(x.strip()) for x in aqi_input.split(",") if x.strip()]
-    forecast(aqi_history)
+plt.figure(figsize=(10,7))
+sns.lineplot(data=data_sub.reset_index(), x='date', y='pm25', label='PM2.5')
+sns.lineplot(data=data_sub.reset_index(), x='date', y='no2', label='NO2')
+sns.lineplot(data=data_sub.reset_index(), x='date', y='co', label='CO')
+plt.title('Pollutant Concentrations Over Time')
+plt.xlabel('Date')
+plt.ylabel('Concentration')
+plt.legend()
+plt.tight_layout()
+plt.show()
